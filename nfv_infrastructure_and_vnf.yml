@@ -1,0 +1,1428 @@
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#  SPDX-License-Identifier: MIT-0
+#
+#  Permission is hereby granted, free of charge, to any person obtaining a copy of this
+#  software and associated documentation files (the "Software"), to deal in the Software
+#  without restriction, including without limitation the rights to use, copy, modify,
+#  merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+#  permit persons to whom the Software is furnished to do so.
+#
+#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+#  INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+#  PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+#  HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+#  OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+#  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: NFV Infrastructure and VNF with automation framework to provide auto healing and IPv4 address persistence.
+  **WARNING** This template creates billable resources. You will be billed for the
+  AWS resources used if you create a stack from this template.
+
+Metadata:
+  "AWS::CloudFormation::Interface":
+    ParameterGroups:
+      - Label:
+          default: "VPC Parameters"
+        Parameters:
+          - AvailabilityZone1
+          - AvailabilityZone2
+          - AvailabilityZone3
+          - VPCCIDRBlock
+          - WAN1SubnetCIDRBlock
+          - WAN2SubnetCIDRBlock
+          - WAN3SubnetCIDRBlock
+          - VIPCIDRBlock
+          - VIPAddress
+      - Label:
+          default: "Instance Parameters"
+        Parameters:
+          - InstanceChoice
+          - InstanceType
+          - InstanceRequiresReboot
+          - CustomAmiId
+          - KeyPair
+          - PublicSSHAccess
+          - JumpHostIPrange
+      - Label:
+          default: "Automation Parameters"
+        Parameters:
+          - SnsEmail
+          - LambdaInfoTracing
+          - ASGCoolDownTime
+          - ASGHealthCheckGracePeriod
+          - ASGUpdateHealthCheckGraceTime
+          - SubnetCreationAttempts
+
+Mappings:
+  # AMI for Cisco CSR1kv and Juniper vSRX and vMX
+  RegionMap:
+    'us-east-1': 
+      CSRAMI: "ami-0b9ccf33549b340cf"
+      SRXAMI: "ami-0ef38a8e3c526d39d"
+      MXAMI: "ami-058765f5dec711ffa"
+    'us-east-2': 
+      CSRAMI: "ami-09d837b8f779bdc2b"
+      SRXAMI: "ami-06055118890a94af6"
+      MXAMI: "ami-0ef9b8961acd0a1c8"
+    'us-west-1': 
+      CSRAMI: "ami-078986d887163741b"
+      SRXAMI: "ami-0b49fbc1eeb6baab1"
+      MXAMI: "ami-014c99447907eea08"
+    'us-west-2': 
+      CSRAMI: "ami-0b5c82032223c16e3"
+      SRXAMI: "ami-009970a4d43ef76ba"
+      MXAMI: "ami-0781d045dc5b2d427"
+    'ca-central-1': 
+      CSRAMI: "ami-073b6ca383a4ee6cf"
+      SRXAMI: "ami-0223e4892fd702b94"
+      MXAMI: "ami-0728fb89d754bdad5"
+    'eu-central-1': 
+      CSRAMI: "ami-086a0f38d28614b49"
+      SRXAMI: "ami-0cb617e2b547b33fe"
+      MXAMI: "ami-0c909c0cb95ea516c"
+    'eu-west-1': 
+      CSRAMI: "ami-086e1185f53016228"
+      SRXAMI: "ami-0b4796cd469da145a"
+      MXAMI: "ami-0ad95096c95740994"
+    'eu-west-2': 
+      CSRAMI: "ami-011222f8fd462cc0c"
+      SRXAMI: "ami-0637c9a2785898f3b"
+      MXAMI: "ami-0c20283d59ade6460"
+    'eu-west-3': 
+      CSRAMI: "ami-08b96e24edcfb4d59"
+      SRXAMI: "ami-0883eee64e3941382"
+      MXAMI: "ami-037ebcc38ee13c894"
+    'eu-north-1': 
+      CSRAMI: "ami-0440dfe36d4f5754e"
+      SRXAMI: "ami-05122a918e87b4489"
+      MXAMI: "ami-0b3143844e6e605be"
+    'eu-south-1': 
+      CSRAMI: "ami-0dd2a74477fd12c8a"
+      SRXAMI: "ami-08e9eee5c6b11639d"
+      MXAMI: "ami-0f36fa171d0f7ddbd"
+    'ap-east-1': 
+      CSRAMI: "ami-0a4964f04cba2ffed"
+      SRXAMI: "ami-0e491fcef76326ba8"
+      MXAMI: "ami-0cb78a125aaa8986d"
+    'ap-southeast-1': 
+      CSRAMI: "ami-08faaa896b344ec56"
+      SRXAMI: "ami-09d00969f29062cc9"
+      MXAMI: "ami-0f35be28517f75e3e"
+    'ap-southeast-2': 
+      CSRAMI: "ami-0f88ff4aa6353b1ec"
+      SRXAMI: "ami-0df2c8f35fb2b3d64"
+      MXAMI: "ami-0a40f79fe18e8f533"
+    'ap-northeast-2': 
+      CSRAMI: "ami-0744d9387b54a9eb6"
+      SRXAMI: "ami-0664dc91fcabb074e"
+      MXAMI: "ami-0ca8ddbef790d121c"
+    'ap-northeast-1': 
+      CSRAMI: "ami-02b328335229d75b8"
+      SRXAMI: "ami-09c1fd01f2c279586"
+      MXAMI: "ami-00f30a38d8a453af1"
+    'ap-northeast-3': 
+      CSRAMI: "ami-0f6c0b9ab16615f01"
+      SRXAMI: "ami-0814a6b4db416420b"
+      MXAMI: "ami-0d7e183224d8f9834"
+    'ap-south-1': 
+      CSRAMI: "ami-065dc709f9a0da5d0"
+      SRXAMI: "ami-029b27a7c3ed57ea2"
+      MXAMI: "ami-0643f4f6b95785ec9"
+    'sa-east-1': 
+      CSRAMI: "ami-0bd831a26368cff95"
+      SRXAMI: "ami-01c1f377de2b7545e"
+      MXAMI: "ami-0cd239c3c7b78efe2"
+    'me-south-1': 
+      CSRAMI: "ami-0bd831a26368cff95"
+      SRXAMI: "ami-01c1f377de2b7545e"
+      MXAMI: "ami-0f499892ecec024c8"
+
+Parameters:
+  AvailabilityZone1:
+    Description: Availability Zone 1
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: eu-west-1a
+
+  AvailabilityZone2:
+    Description: Availability Zone 2
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: eu-west-1b
+  
+  AvailabilityZone3:
+    Description: Availability Zone 3
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: eu-west-1c
+
+  KeyPair:
+    Description: Keypair to access the device. As per inband access guidelines for each instance type, this is associated to 'ec2-user' username per default in Amazon Linux2, Cisco CSR1000v and Juniper vSRX, and to 'jnpr' user in Juniper vMX.
+    Type: "AWS::EC2::KeyPair::KeyName"
+    Default: TestNetwork
+  
+  PublicSSHAccess:
+    Description: If external SSH access from public IPv4 addresses is allowed or not. If allowed, the source range is determined under JumpHostIPrange. If not allowed, only Session Manager access will be availble, where applicable.
+    Default: "true"
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    ConstraintDescription: must specify true or false.
+  
+  JumpHostIPrange:
+    Description: Source public IPv4 Address range allowed to connect to the instance management port per SSH. Only applicable if PublicSSHAccess is true.
+    Type: String
+    ConstraintDescription: Requires a CIDR block
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/([0-9]|[1-2][0-9]|3[0-2]))?$"
+    Default: 0.0.0.0/32
+
+  SnsEmail:
+    Type: String
+    Description: The email address that receives SNS notifications
+  
+  LambdaInfoTracing:
+    Description: True, to include log INFO level details in Lambda CloudWatch logs
+    Default: "true"
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    ConstraintDescription: must specify true or false.
+
+  ASGCoolDownTime:
+    Description: Time helps to guard between consecutive launch and terminate actions in EC2 Auto Scaling group. AWS default is 300 seconds. Minimum tested valued is 10.
+    Type: Number
+    Default: 10
+
+  ASGHealthCheckGracePeriod:
+    Description: Grace time to wait before checking the instance health status after launching the EC2 Auto Scaling Group. AWS default is 300 seconds. Minimum tested values -  10 for Amazon Linux2, 10 for Cisco CSR1000v, 600 for Juniper vSRX, 1020 for Juniper vMX. Recommended to be conservative to allow for VNF bootstrap time, beyond minimum tested values in each case. Main difference in time values is due to additional reboot required or not after interface attachment, as well as instance size. 
+    ConstraintDescription: Must be an integer value aligned with each VNF type and instance size. Follow description guidance.
+    Type: Number
+    MinValue: 10
+
+  ASGUpdateHealthCheckGraceTime:
+    Description: Default grace period after creation of ASG Lifehooks and before launching first instance
+    Type: Number
+    Default: 120
+
+  SubnetCreationAttempts:
+    Description: Number of attempts to create the VIP subnet within same Lifecycle Launch stage. Not recommended below 3.
+    Type: Number
+    Default: 10
+
+  VPCCIDRBlock:
+    Type: String
+    Default: "10.16.0.0/16"
+    AllowedPattern: "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\\/([1-2][0-9]|3[0-2]))?$"
+    Description: CIDR Block for the VPC 
+  
+  WAN1SubnetCIDRBlock:
+    Type: String
+    Default: "10.16.1.0/24"
+    AllowedPattern: "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\\/([1-2][0-9]|3[0-2]))?$"
+    Description: CIDR Block for the WAN Subnet in AvailabilityZone1
+
+  WAN2SubnetCIDRBlock:
+    Type: String
+    Default: "10.16.2.0/24"
+    AllowedPattern: "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\\/([1-2][0-9]|3[0-2]))?$"
+    Description: CIDR Block for the WAN Subnet in AvailabilityZone2
+  
+  WAN3SubnetCIDRBlock:
+    Type: String
+    Default: "10.16.3.0/24"
+    AllowedPattern: "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\\/([1-2][0-9]|3[0-2]))?$"
+    Description: CIDR Block for the WAN Subnet in AvailabilityZone3
+
+  VIPCIDRBlock:
+    Type: String
+    Default: "10.16.10.0/24"
+    AllowedPattern: "^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\\/([1-2][0-9]|3[0-2]))?$"
+    Description: CIDR Block for the VIP segment to attach and detach
+  
+  VIPAddress:
+    Type: String
+    Default: "10.16.10.20/32"
+    AllowedPattern: "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\\/(32))$"
+    Description: Specific IP address within CIDR block from VIP subnet (including /32)
+
+  InstanceChoice: 
+    Description: Cisco CSR1000v, Juniper vSRX, Juniper vMX or Custom
+    Default: Custom
+    Type: String
+    AllowedValues: 
+      - CiscoCSR1000v
+      - JunipervSRX
+      - JunipervMX
+      - Custom
+    ConstraintDescription: must specify CiscoCSR1000v, JunipervSRX, JunipervMX or Custom.
+  
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - c5.large
+      - c5.2xlarge
+      - c5.4xlarge
+      - m5.large
+    Description: Enter t3.micro, c5.large, c5.2xlarge or m5.large. Default is t3.micro. Default recommended instance type in AWS Marketplace for Cisco CSR 100V BYOL and Juniper vSRX BYOL is c5.large, and for Juniper vMX BYOL is c5.4xlarge.
+  
+  InstanceRequiresReboot:
+    Description: True, if instance requires reboot to include second ENI or false, if it dynamically supports addition of ENI without requiring restart. Juniper vSRX and vMX have been tested requiring a restart after dynamic interface attachment ('true').
+    Default: "false"
+    Type: String
+    AllowedValues:
+      - "true"
+      - "false"
+    ConstraintDescription: must specify true or false.
+
+  CustomAmiId:
+    Description: Custom AMI from AWS Systems Manager Parameter Store (Only needed if device is neither CiscoCSR1000v, nor JunipervSRX, nor JunipervMX). 
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    # obtain list with
+    # aws ssm get-parameters-by-path --path /aws/service/ami-amazon-linux-latest  --query 'Parameters[].Name'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  
+  CustomUserData:
+    Description: Optional (can be empty) User Data for custom instance (Only needed if device is neither CiscoCSR1000v, nor JunipervSRX, nor JunipervSRX)
+    Type: String
+    Default: ""
+
+Conditions: 
+  AZ1EqualsAZ2: !Equals [ !Ref AvailabilityZone1, !Ref AvailabilityZone2 ]
+  AZ1EqualsAZ3: !Equals [ !Ref AvailabilityZone1, !Ref AvailabilityZone3 ]
+  AZ2EqualsAZ3: !Equals [ !Ref AvailabilityZone2, !Ref AvailabilityZone3 ]
+  AZ2NotEqualsAZ3: !Not [ !Equals [ !Ref AvailabilityZone2, !Ref AvailabilityZone3 ]]
+  SameAZ1AZ2AZ3: !And
+    - !Condition AZ1EqualsAZ2
+    - !Condition AZ2EqualsAZ3
+  SameAZ1AZ2NotAZ3: !And
+    - !Condition AZ1EqualsAZ2
+    - !Condition AZ2NotEqualsAZ3
+  SameAZ1AZ3NotAZ2: !And
+    - !Condition AZ1EqualsAZ3
+    - !Condition AZ2NotEqualsAZ3
+  CreateCiscoCSR1000v: !Equals [ !Ref InstanceChoice, CiscoCSR1000v ]
+  CreateJunipervSRX: !Equals [ !Ref InstanceChoice, JunipervSRX ]
+  CreateJunipervMX: !Equals [ !Ref InstanceChoice, JunipervMX ]
+  CreateCustom: !Equals [ !Ref InstanceChoice, Custom ]
+  InstanceEqualsT3: !Equals [ !Ref InstanceType, t3.micro ]
+  ExternalSSHAccess: !Equals [ !Ref PublicSSHAccess, "true" ] 
+
+Resources:
+  # IAM policies and role to grab configs
+  Topic:
+    Type: AWS::SNS::Topic
+    Properties: 
+      DisplayName: "VNF notifications"
+      KmsMasterKeyId: alias/aws/sns
+
+  Subscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !Ref SnsEmail
+      Protocol: email
+      TopicArn: !Ref Topic
+
+  Policy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+        - Effect: Allow
+          Resource: "*"
+          Action:
+          - autoscaling:CompleteLifecycleAction
+          - sns:Publish
+
+  ASGRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - !Ref Policy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - autoscaling.amazonaws.com
+          Action: sts:AssumeRole
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonSSMFullAccess
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      - !Ref Policy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action: sts:AssumeRole
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+      - !Ref Policy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action: sts:AssumeRole
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+
+  # VPC Resources - VPCCIDRBlock (default 10.16.0.0/16)
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCIDRBlock
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [Ref: "AWS::StackName", VPC]]
+
+  WAN1Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: !Ref WAN1SubnetCIDRBlock
+      AvailabilityZone:
+        Ref: AvailabilityZone1
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [Ref: "AWS::StackName", WAN1 Subnet]]
+
+  WAN2Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: !Ref WAN2SubnetCIDRBlock
+      AvailabilityZone:
+        Ref: AvailabilityZone2
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [Ref: "AWS::StackName", WAN2 Subnet]]
+
+  WAN3Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock: !Ref WAN3SubnetCIDRBlock
+      AvailabilityZone:
+        Ref: AvailabilityZone3
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [Ref: "AWS::StackName", WAN3 Subnet]]
+ 
+  WANRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [Ref: "AWS::StackName", WAN Route Table]]
+
+  WAN1SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: WANRouteTable
+      SubnetId:
+        Ref: WAN1Subnet
+
+  WAN2SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: WANRouteTable
+      SubnetId:
+        Ref: WAN2Subnet
+
+  WAN3SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId:
+        Ref: WANRouteTable
+      SubnetId:
+        Ref: WAN3Subnet
+
+  #ICMP is allowed from anywhere within 10.0.0.0 address space (not recommended for real environments) 
+  Ec2SecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Open-up all ports for 10.16/16 and ICMP and SSH from 10/8
+      GroupName: !Join ["-", [Ref: "AWS::StackName", "EC2-sec-group"]]
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+        !If 
+          - ExternalSSHAccess
+          -  
+            - IpProtocol: tcp
+              FromPort: 1
+              ToPort: 65535
+              CidrIp: !Ref VPCCIDRBlock
+            - IpProtocol: udp
+              FromPort: 1
+              ToPort: 65535
+              CidrIp: !Ref VPCCIDRBlock
+            - IpProtocol: icmp
+              CidrIp: !Ref VPCCIDRBlock
+              FromPort: -1
+              ToPort: -1
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: !Ref VPCCIDRBlock
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: !Ref JumpHostIPrange
+          - 
+            - IpProtocol: tcp
+              FromPort: 1
+              ToPort: 65535
+              CidrIp: !Ref VPCCIDRBlock
+            - IpProtocol: udp
+              FromPort: 1
+              ToPort: 65535
+              CidrIp: !Ref VPCCIDRBlock
+            - IpProtocol: icmp
+              CidrIp: !Ref VPCCIDRBlock
+              FromPort: -1
+              ToPort: -1
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: !Ref VPCCIDRBlock
+      SecurityGroupEgress:
+        !If 
+          - ExternalSSHAccess
+          -  
+            - IpProtocol: tcp
+              FromPort: 1
+              ToPort: 65535
+              CidrIp: !Ref VPCCIDRBlock
+            - IpProtocol: udp
+              FromPort: 1
+              ToPort: 65535
+              CidrIp: !Ref VPCCIDRBlock
+            - IpProtocol: icmp
+              CidrIp: !Ref VPCCIDRBlock
+              FromPort: -1
+              ToPort: -1
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: !Ref VPCCIDRBlock
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: !Ref JumpHostIPrange
+          - 
+            - IpProtocol: tcp
+              FromPort: 1
+              ToPort: 65535
+              CidrIp: !Ref VPCCIDRBlock
+            - IpProtocol: udp
+              FromPort: 1
+              ToPort: 65535
+              CidrIp: !Ref VPCCIDRBlock
+            - IpProtocol: icmp
+              CidrIp: !Ref VPCCIDRBlock
+              FromPort: -1
+              ToPort: -1
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: !Ref VPCCIDRBlock
+
+  CustomLaunchTemplate:
+    Condition: CreateCustom
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
+      LaunchTemplateData: 
+        !If
+          - InstanceEqualsT3
+          - IamInstanceProfile: 
+              Arn: !GetAtt InstanceProfile.Arn
+            CreditSpecification: 
+              CpuCredits: unlimited
+            ImageId:
+              !Ref CustomAmiId
+            InstanceType: !Ref InstanceType
+            KeyName: !Ref KeyPair
+            NetworkInterfaces:
+              - DeviceIndex: 0
+                DeleteOnTermination: true
+                Groups:
+                  - Ref: InstanceWANSecurityGroup
+            # Custom User Data (if any)
+            UserData:
+              !Ref CustomUserData  
+          - IamInstanceProfile: 
+              Arn: !GetAtt InstanceProfile.Arn
+            ImageId:
+              !Ref CustomAmiId
+            InstanceType: !Ref InstanceType
+            KeyName: !Ref KeyPair
+            NetworkInterfaces:
+              - DeviceIndex: 0
+                DeleteOnTermination: true
+                Groups:
+                  - Ref: InstanceWANSecurityGroup
+            # Custom User Data (if any)
+            UserData:
+              !Ref CustomUserData  
+
+  CSRLaunchTemplate:
+    Condition: CreateCiscoCSR1000v
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
+      LaunchTemplateData: 
+        IamInstanceProfile: 
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", CSRAMI]
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyPair
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            DeleteOnTermination: true
+            Groups:
+              - Ref: InstanceWANSecurityGroup
+        # CSR User Data 
+        UserData:
+          Fn::Base64: !Sub 
+          - |
+            hostname="Cisco-VNF"
+            license="ax"
+            ios-config-1="ip scp server enable"
+            ios-config-2="no ip route 0.0.0.0 0.0.0.0"
+            ios-config-3="interface GigabitEthernet2"
+            ios-config-4="description VIP interfaces with default GW ${DefaultGW}"
+            ios-config-5="ip address dhcp"
+            ios-config-6="no shutdown"
+            ios-config-7="ip route 0.0.0.0 0.0.0.0 GigabitEthernet2 ${DefaultGW}"
+            ios-config-8="end"
+            ios-config-9="write memory"
+          - DefaultGW: !Join [".", [ !Select [0, !Split [".", !Ref VIPCIDRBlock]], !Select [1, !Split [".", !Ref VIPCIDRBlock]], !Select [2, !Split [".", !Ref VIPCIDRBlock]], "1"]]
+  
+  SRXLaunchTemplate:
+    Condition: CreateJunipervSRX
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
+      LaunchTemplateData: 
+        IamInstanceProfile: 
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", SRXAMI]
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyPair
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            DeleteOnTermination: true
+            Groups:
+              - Ref: InstanceWANSecurityGroup
+        # SRX User Data 
+        UserData:
+          Fn::Base64: !Sub 
+          - |
+            #junos-config
+            groups {
+              aws-default {
+                  system {
+                      services {
+                          ssh {
+                              no-passwords;
+                          }
+                          netconf {
+                              ssh;
+                          }
+                          web-management {
+                              https {
+                                  system-generated-certificate;
+                              }
+                          }
+                      }
+                      license {
+                          autoupdate {
+                              url https://ae1.juniper.net/junos/key_retrieval;
+                          }
+                      }
+                  }
+                  interfaces {
+                      fxp0 {
+                          unit 0 {
+                              family inet {
+                                  dhcp;
+                              }
+                          }
+                      }
+                  }
+              }
+            }
+            apply-groups aws-default;
+            system {
+              host-name JunipervSRX-VNF;
+              syslog {
+                  file messages {
+                      any any;
+                  }
+              }
+            }
+            security {
+              policies {
+                  from-zone untrust to-zone trust {
+                      policy default {
+                          match {
+                              source-address any;
+                              destination-address any;
+                              application any;
+                          }
+                          then {
+                              permit;
+                          }
+                      }
+                  }
+                  from-zone trust to-zone untrust {
+                      policy default {
+                          match {
+                              source-address any;
+                              destination-address any;
+                              application any;
+                          }
+                          then {
+                              permit;
+                          }
+                      }
+                  }
+              }
+              zones {
+                  security-zone untrust {
+                      host-inbound-traffic {
+                          system-services {
+                              any-service;
+                          }
+                          protocols {
+                              all;
+                          }
+                      }
+                      interfaces {
+                          ge-0/0/0.0;
+                      }
+                  }
+                  security-zone trust {
+                      host-inbound-traffic {
+                          system-services {
+                              any-service;
+                          }
+                          protocols {
+                              all;
+                          }
+                      }
+                      interfaces {
+                          ge-0/0/1.0;
+                      }
+                  }
+              }
+            }
+            interfaces {
+              ge-0/0/0 {
+                  unit 0 {
+                      family inet {
+                          dhcp;
+                      }
+                  }
+              }
+              ge-0/0/1 {
+                  unit 0 {
+                      family inet {
+                          dhcp;
+                      }
+                  }
+              }
+            }
+            routing-options {
+              static {
+                  route 0.0.0.0/0 next-hop ${DefaultGW};
+              }
+            }
+          - DefaultGW: !Join [".", [ !Select [0, !Split [".", !Ref VIPCIDRBlock]], !Select [1, !Split [".", !Ref VIPCIDRBlock]], !Select [2, !Split [".", !Ref VIPCIDRBlock]], "1"]]
+  
+  MXLaunchTemplate:
+    Condition: CreateJunipervMX
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
+      LaunchTemplateData: 
+        IamInstanceProfile: 
+          Arn: !GetAtt InstanceProfile.Arn
+        ImageId: !FindInMap [RegionMap, !Ref "AWS::Region", MXAMI]
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref KeyPair
+        NetworkInterfaces:
+          - DeviceIndex: 0
+            DeleteOnTermination: true
+            Groups:
+              - Ref: InstanceWANSecurityGroup
+        # vMX User Data 
+        UserData:
+          Fn::Base64: !Sub 
+          - |
+            #junos-config
+            groups {
+              global {
+                  system {
+                    host-name JunipervMX-VNF;
+                    login {
+                        user jnpr {
+                            uid 2000;
+                            class super-user;
+                            authentication {
+                                ssh-rsa "SSHRSAKEY"; ## SECRET-DATA
+                            }
+                        }
+                    }
+                    services {
+                        ssh {
+                            root-login deny-password;
+                        }
+                    }
+                    syslog {
+                        user * {
+                            any emergency;
+                        }
+                        file messages {
+                            any notice;
+                            authorization info;
+                        }
+                        file interactive-commands {
+                            interactive-commands any;
+                        }
+                    }
+                  }
+                  interfaces {
+                      fxp0 {
+                          unit 0 {
+                              family inet {
+                                  dhcp;
+                              }
+                          }
+                      }
+                  }
+              }
+            }
+            apply-groups global;
+            interfaces {
+                ge-0/0/0 {                          
+                    unit 0 {
+                        family inet {
+                            dhcp;
+                        }
+                    }
+                }
+            }
+            routing-options {
+                static {
+                    route 0.0.0.0/0 {
+                        next-hop ${DefaultGW};
+                        retain;
+                        no-readvertise;
+                    }
+                }
+            }
+          - DefaultGW: !Join [".", [ !Select [0, !Split [".", !Ref VIPCIDRBlock]], !Select [1, !Split [".", !Ref VIPCIDRBlock]], !Select [2, !Split [".", !Ref VIPCIDRBlock]], "1"]]     
+  ASG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MinSize: '0'
+      MaxSize: '1'
+      DesiredCapacity: '0'
+      Cooldown: !Ref ASGCoolDownTime
+      HealthCheckGracePeriod: !Ref ASGHealthCheckGracePeriod
+      LaunchTemplate:
+        LaunchTemplateId: 
+          !If [CreateJunipervMX, !Ref MXLaunchTemplate, !If [CreateJunipervSRX, !Ref SRXLaunchTemplate, !If [CreateCiscoCSR1000v, !Ref CSRLaunchTemplate, !Ref CustomLaunchTemplate]]] 
+        Version: 
+          !If [CreateJunipervMX, !GetAtt MXLaunchTemplate.LatestVersionNumber, !If [CreateJunipervSRX, !GetAtt SRXLaunchTemplate.LatestVersionNumber, !If [CreateCiscoCSR1000v, !GetAtt CSRLaunchTemplate.LatestVersionNumber, !GetAtt CustomLaunchTemplate.LatestVersionNumber]]]
+      VPCZoneIdentifier: 
+        - Ref: WAN1Subnet
+        - Ref: WAN2Subnet
+        - Ref: WAN3Subnet
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: !Sub "${AWS::StackName}-ASG"
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: 1
+        MinInstancesInService: 0
+        PauseTime: PT5M
+        SuspendProcesses: [ HealthCheck, ReplaceUnhealthy, AZRebalance, Launch, AlarmNotification, ScheduledActions ]
+        WaitOnResourceSignals: true
+      AutoScalingScheduledAction:
+        IgnoreUnmodifiedGroupSizeProperties: true
+
+  EndpointSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Open-up ports for local VPC
+      GroupName: !Join ["-", [Ref: "AWS::StackName", "vpc-sec-group"]]
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 1
+          ToPort: 65535
+          CidrIp: !Ref VPCCIDRBlock
+        - IpProtocol: udp
+          FromPort: 1
+          ToPort: 65535
+          CidrIp: !Ref VPCCIDRBlock
+        - IpProtocol: icmp
+          CidrIp: !Ref VPCCIDRBlock
+          FromPort: -1
+          ToPort: -1
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 1
+          ToPort: 65535
+          CidrIp: !Ref VPCCIDRBlock
+        - IpProtocol: udp
+          FromPort: 1
+          ToPort: 65535
+          CidrIp: !Ref VPCCIDRBlock
+        - IpProtocol: icmp
+          CidrIp: !Ref VPCCIDRBlock
+          FromPort: -1
+          ToPort: -1
+
+  SSMEndpointWAN:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId:
+        Ref: VPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssm"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: True
+      SubnetIds:
+        !If
+          - SameAZ1AZ2AZ3
+          - 
+            - !Ref WAN1Subnet
+          - !If 
+            - SameAZ1AZ2NotAZ3
+            - 
+              - !Ref WAN1Subnet
+              - !Ref WAN3Subnet
+            - !If
+              - SameAZ1AZ3NotAZ2
+              - 
+                - !Ref WAN1Subnet
+                - !Ref WAN2Subnet
+              - 
+                - !Ref WAN1Subnet
+                - !Ref WAN2Subnet
+                - !Ref WAN3Subnet
+      SecurityGroupIds:
+        - Ref: EndpointSecGroup
+
+  SSMMEndpointWAN:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId:
+        Ref: VPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.ssmmessages"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: True
+      SubnetIds:
+        !If
+          - SameAZ1AZ2AZ3
+          - 
+            - !Ref WAN1Subnet
+          - !If 
+            - SameAZ1AZ2NotAZ3
+            - 
+              - !Ref WAN1Subnet
+              - !Ref WAN3Subnet
+            - !If
+              - SameAZ1AZ3NotAZ2
+              - 
+                - !Ref WAN1Subnet
+                - !Ref WAN2Subnet
+              - 
+                - !Ref WAN1Subnet
+                - !Ref WAN2Subnet
+                - !Ref WAN3Subnet
+      SecurityGroupIds:
+        - Ref: EndpointSecGroup
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Join ["-", [Ref: "AWS::StackName", IGW]]
+
+  AttachIGWGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: InternetGateway
+
+  DirectInternetRouteWAN:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+      RouteTableId:
+        Ref: WANRouteTable
+
+  InstanceEIPWAN:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  InstanceWANSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Instance Security WAN Group Rules
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+        !If 
+          - ExternalSSHAccess
+          -
+            - IpProtocol: tcp
+              FromPort: 22
+              ToPort: 22
+              CidrIp: !Ref JumpHostIPrange
+            - IpProtocol: icmp
+              FromPort: -1
+              ToPort: -1
+              CidrIp: 0.0.0.0/0
+          - 
+            - IpProtocol: icmp
+              FromPort: -1
+              ToPort: -1
+              CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
+
+  # LifeCycleHook for AutoScalingGroup (ASG)
+  LchookEc2Ins:
+    Type: "AWS::AutoScaling::LifecycleHook"
+    DependsOn: UpdateASGEventRule
+    Properties:
+      AutoScalingGroupName: !Ref ASG
+      LifecycleTransition: "autoscaling:EC2_INSTANCE_LAUNCHING"
+      DefaultResult: "ABANDON"
+      HeartbeatTimeout: 600
+      NotificationTargetARN: 
+        Ref: Topic
+      RoleARN: !GetAtt ASGRole.Arn
+
+  LchookEc2Term:
+    Type: "AWS::AutoScaling::LifecycleHook"
+    DependsOn: UpdateASGEventRule
+    Properties:
+      AutoScalingGroupName: !Ref ASG
+      LifecycleTransition: "autoscaling:EC2_INSTANCE_TERMINATING"
+      DefaultResult: "ABANDON"
+      HeartbeatTimeout: 300
+      NotificationTargetARN: 
+        Ref: Topic
+      RoleARN: !GetAtt ASGRole.Arn
+
+  # Lambda Creation and related resources
+  RoleLambdaAttach2ndEniCfn:
+    Type: "AWS::IAM::Role"
+    DependsOn: RoleLambdaUpdateASGCfn
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+
+  PolicyLambdaAttach2ndEniCfn:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: LambdaAttach2ndEniCfn
+      Roles: [
+          !Ref RoleLambdaAttach2ndEniCfn
+        ]
+      PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: [
+                "ec2:AllocateAddress",
+                "ec2:AssociateAddress",
+                "ec2:AssignPrivateIpAddresses",
+                "ec2:AssociateRouteTable",
+                "ec2:AssociateSubnetCidrBlock",
+                "ec2:AssociateVpcCidrBlock",
+                "ec2:CreateDefaultSubnet",
+                "ec2:CreateDefaultVpc",
+                "ec2:CreateNetworkInterfacePermission",
+                "ec2:CreateRoute",
+                "ec2:CreateRouteTable",
+                "ec2:CreateSecurityGroup",
+                "ec2:CreateSubnet",
+                "ec2:CreateTags",
+                "ec2:CreateVpc",
+                "ec2:CreateNetworkInterface",
+                "ec2:DescribeInstances",
+                "ec2:DetachNetworkInterface",
+                "ec2:ModifyNetworkInterfaceAttribute",
+                "autoscaling:CompleteLifecycleAction",
+                "ec2:DeleteTags",
+                "ec2:DescribeNetworkInterfaces",
+                "ec2:CreateTags",
+                "ec2:DeleteNetworkInterface",
+                "ec2:AttachNetworkInterface",
+                "ec2:DeleteNetworkInterface",
+                "ec2:DeleteNetworkInterfacePermission",
+                "ec2:DeleteSubnet",
+                "ec2:DeleteTags",
+                "ec2:DeleteVpc",
+                "autoscaling:DescribeAutoScalingGroups",
+                "ec2:TerminateInstances",
+                "ec2:DescribeAddresses",
+                "ec2:DescribeAvailabilityZones",
+                "ec2:DescribeInstances",
+                "ec2:DescribeInternetGateways",
+                "ec2:DescribeKeyPairs",
+                "ec2:DescribeMovingAddresses",
+                "ec2:DescribeNatGateways",
+                "ec2:DescribeNetworkAcls",
+                "ec2:DescribeNetworkInterfaceAttribute",
+                "ec2:DescribeNetworkInterfacePermissions",
+                "ec2:DescribeNetworkInterfaces",
+                "ec2:DescribeRouteTables",
+                "ec2:DescribeSecurityGroupReferences",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeStaleSecurityGroups",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeTags",
+                "ec2:DescribeVpcAttribute",
+                "ec2:DescribeVpcs",
+                "ec2:DetachNetworkInterface",
+                "ec2:DisassociateAddress",
+                "ec2:DisassociateRouteTable",
+                "ec2:DisassociateSubnetCidrBlock",
+                "ec2:DisassociateVpcCidrBlock",
+                "ec2:ModifyNetworkInterfaceAttribute",
+                "ec2:ModifySubnetAttribute",
+                "ec2:ModifyVpcAttribute",
+                "ec2:ModifyVpcTenancy",
+                "ec2:MoveAddressToVpc",
+                "ec2:RebootInstances",
+                "ec2:ReleaseAddress",
+                "ec2:ReplaceNetworkAclAssociation",
+                "ec2:ReplaceNetworkAclEntry",
+                "ec2:ReplaceRoute",
+                "ec2:ReplaceRouteTableAssociation",
+                "ec2:ResetNetworkInterfaceAttribute",
+                "ec2:RestoreAddressToClassic",
+                "ec2:StartInstances",
+                "ec2:StopInstances",
+                "ec2:UnassignIpv6Addresses",
+                "ec2:UnassignPrivateIpAddresses",
+                "ec2:UpdateSecurityGroupRuleDescriptionsEgress",
+                "ec2:UpdateSecurityGroupRuleDescriptionsIngress",
+                "sns:ListTopics",
+                "sns:ListSubscriptionsByTopic",
+                "sns:CreateTopic",
+                "cloudwatch:DescribeAlarms",
+                "cloudwatch:PutMetricAlarm",
+                "cloudwatch:DeleteAlarms",
+                "cloudwatch:GetMetricStatistics",
+                "logs:DescribeLogGroups",
+                "logs:DescribeLogStreams",
+                "logs:GetLogEvents"
+              ]
+              Resource: "*"
+            - Effect: Allow
+              Action: [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ]
+              Resource: "arn:aws:logs:*:*:*"
+            - Effect: Allow
+              Action: "logs:CreateLogGroup"
+              Resource: "arn:aws:logs:*:*:*"
+
+  RoleLambdaUpdateASGCfn:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+
+  PolicyLambdaUpdateASGCfn:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: LambdaUpdateASGCfn
+      Roles: [
+          !Ref RoleLambdaUpdateASGCfn
+        ]
+      PolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            - Effect: Allow
+              Action: [
+                "autoscaling:AttachInstances",
+                "autoscaling:AttachLoadBalancerTargetGroups",
+                "autoscaling:AttachLoadBalancers",
+                "autoscaling:BatchDeleteScheduledAction",
+                "autoscaling:BatchPutScheduledUpdateGroupAction",
+                "autoscaling:CancelInstanceRefresh",
+                "autoscaling:CompleteLifecycleAction",
+                "autoscaling:CreateAutoScalingGroup",
+                "autoscaling:CreateLaunchConfiguration",
+                "autoscaling:CreateOrUpdateTags",
+                "autoscaling:DeleteAutoScalingGroup",
+                "autoscaling:DeleteLaunchConfiguration",
+                "autoscaling:DeleteLifecycleHook",
+                "autoscaling:DeleteNotificationConfiguration",
+                "autoscaling:DeletePolicy", 
+                "autoscaling:DeleteScheduledAction",
+                "autoscaling:DeleteTags",
+                "autoscaling:DeleteWarmPool",
+                "autoscaling:DescribeAccountLimits",
+                "autoscaling:DescribeAdjustmentTypes",
+                "autoscaling:DescribeAutoScalingGroups", 
+                "autoscaling:DescribeAutoScalingInstances",
+                "autoscaling:DescribeAutoScalingNotificationTypes",
+                "autoscaling:DescribeInstanceRefreshes",
+                "autoscaling:DescribeLaunchConfigurations", 
+                "autoscaling:DescribeLifecycleHookTypes",
+                "autoscaling:DescribeLifecycleHooks",
+                "autoscaling:DescribeLoadBalancerTargetGroups",
+                "autoscaling:DescribeLoadBalancers", 
+                "autoscaling:DescribeMetricCollectionTypes",
+                "autoscaling:DescribeNotificationConfigurations",
+                "autoscaling:DescribePolicies",
+                "autoscaling:DescribeScalingActivities", 
+                "autoscaling:DescribeScalingProcessTypes",
+                "autoscaling:DescribeScheduledActions",
+                "autoscaling:DescribeTags",
+                "autoscaling:DescribeTerminationPolicyTypes", 
+                "autoscaling:DescribeWarmPool",
+                "autoscaling:DetachInstances",
+                "autoscaling:DetachLoadBalancerTargetGroups",
+                "autoscaling:DetachLoadBalancers", 
+                "autoscaling:DisableMetricsCollection",
+                "autoscaling:EnableMetricsCollection",
+                "autoscaling:EnterStandby", 
+                "autoscaling:ExecutePolicy",
+                "autoscaling:ExitStandby",
+                "autoscaling:PutLifecycleHook",
+                "autoscaling:PutNotificationConfiguration", 
+                "autoscaling:PutScalingPolicy",
+                "autoscaling:PutScheduledUpdateGroupAction",
+                "autoscaling:PutWarmPool",
+                "autoscaling:RecordLifecycleActionHeartbeat", 
+                "autoscaling:ResumeProcesses",
+                "autoscaling:SetDesiredCapacity",
+                "autoscaling:SetInstanceHealth",
+                "autoscaling:SetInstanceProtection", 
+                "autoscaling:StartInstanceRefresh",
+                "autoscaling:SuspendProcesses",
+                "autoscaling:TerminateInstanceInAutoScalingGroup",
+                "autoscaling:UpdateAutoScalingGroup", 
+                "sns:ListTopics",
+                "sns:ListSubscriptionsByTopic",
+                "sns:CreateTopic",
+                "cloudwatch:DescribeAlarms",
+                "cloudwatch:PutMetricAlarm",
+                "cloudwatch:DeleteAlarms",
+                "cloudwatch:GetMetricStatistics",
+                "logs:DescribeLogGroups",
+                "logs:DescribeLogStreams",
+                "logs:GetLogEvents"
+              ]
+              Resource: "*"
+            - Effect: Allow
+              Action: [
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+              ]
+              Resource: "arn:aws:logs:*:*:*"
+            - Effect: Allow
+              Action: "logs:CreateLogGroup"
+              Resource: "arn:aws:logs:*:*:*"
+
+  # Lambda Function to manage ENI Lifecycle
+  LambdaAttach2ndENI:
+    Type: AWS::Serverless::Function
+    DependsOn: RoleLambdaUpdateASGCfn
+    Properties:
+      Runtime: "python3.8"
+      Handler: ENIlifecycle.lambda_handler
+      Role: !GetAtt RoleLambdaAttach2ndEniCfn.Arn
+      CodeUri: src/
+      Timeout: 300
+      Environment:
+        Variables:
+          SecGroupId: !Ref InstanceWANSecurityGroup
+          VPCId: !Ref VPC
+          VIPCIDRBlock: !Ref VIPCIDRBlock
+          WANRouteTable: !Ref WANRouteTable
+          VIPAddress: !Ref VIPAddress
+          EIPAddress: !Ref InstanceEIPWAN
+          EIPAllocationId: 
+            Fn::GetAtt:
+              - InstanceEIPWAN
+              - AllocationId
+          LambdaInfoTracing: !Ref LambdaInfoTracing
+          InstanceRequiresReboot: !Ref InstanceRequiresReboot
+          SubnetCreationAttempts: !Ref SubnetCreationAttempts
+
+  # Lambda Function to update ASG to trigger first instance launch
+  LambdaUpdateASG:
+    Type: AWS::Serverless::Function
+    Properties: 
+      Runtime: "python3.8"
+      Handler: updateASG.lambda_handler
+      Role: !GetAtt RoleLambdaUpdateASGCfn.Arn
+      CodeUri: src/
+      Timeout: 600
+      Environment:
+        Variables:
+          SecGroupId: !Ref InstanceWANSecurityGroup
+          ASGUpdateHealthCheckGraceTime: !Ref ASGUpdateHealthCheckGraceTime
+          VPCId: !Ref VPC
+          VIPCIDRBlock: !Ref VIPCIDRBlock
+          VIPAddress: !Ref VIPAddress
+          LambdaInfoTracing: !Ref LambdaInfoTracing
+          AutoScalingGroupName: !Ref ASG
+      
+  # CloudWatch Event Trigger for Lifecycle Hooks
+  NewInstanceEventRule:
+    Type: "AWS::Events::Rule"
+    DependsOn: UpdateASGEventRule
+    Properties:
+      EventPattern:
+        source:
+          - "aws.autoscaling"
+        detail-type:
+          - "EC2 Instance-launch Lifecycle Action"
+          - "EC2 Instance-terminate Lifecycle Action"
+        detail:
+          AutoScalingGroupName:
+            - !Ref ASG
+      Targets:
+        -
+          Arn: !GetAtt LambdaAttach2ndENI.Arn
+          Id: Lambda1
+
+  PermissionForEventsToInvokeLambda2ndENI:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName:
+        Ref: "LambdaAttach2ndENI"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn:
+        Fn::GetAtt:
+          - "NewInstanceEventRule"
+          - "Arn"
+  
+  # CloudWatch Event Trigger to Update ASG
+  UpdateASGEventRule:
+    Type: "AWS::Events::Rule"
+    Properties:
+      EventPattern:
+        source:
+          - "aws.autoscaling"
+        detail-type:
+          - "AWS API Call via CloudTrail"
+        detail:
+          eventSource: 
+            - "autoscaling.amazonaws.com"
+          eventName:
+            - "PutLifecycleHook"
+      Targets:
+        -
+          Arn: !GetAtt LambdaUpdateASG.Arn
+          Id: Lambda1
+
+  PermissionForEventsToInvokeLambdaASG:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      FunctionName:
+        Ref: "LambdaUpdateASG"
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn:
+        Fn::GetAtt:
+          - "UpdateASGEventRule"
+          - "Arn"
+
+Outputs:
+  # Generic Outpouts
+  KeyPair:
+    Description: "Keypair to access the instance"
+    Value: !Ref KeyPair
+    Export:
+      Name: !Sub "${AWS::StackName}-KeyPair"
+  # VPC Outputs
+  VPC:
+    Description: "VPC"
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VPC"
+
+  InstanceWANIP:
+    Description: "Instance WAN IP address"
+    Value: !Ref InstanceEIPWAN
+    Export:
+      Name: !Sub "${AWS::StackName}-Instance-WANIP"

@@ -1,0 +1,12 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "test-cisco"
+s3_bucket = "<your-s3-bucket-for-SAM-cli>"
+s3_prefix = "test-cisco"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "AvailabilityZone1=\"us-east-1a\" AvailabilityZone2=\"us-east-1b\" AvailabilityZone3=\"us-east-1c\" KeyPair=\"TestNetwork\" PublicSSHAccess=\"true\" JumpHostIPrange=\"0.0.0.0/0\" SnsEmail=\"foo@foo.bar\" LambdaInfoTracing=\"true\" ASGCoolDownTime=\"10\" ASGHealthCheckGracePeriod=\"10\" ASGUpdateHealthCheckGraceTime=\"120\" SubnetCreationAttempts=\"10\" VPCCIDRBlock=\"10.2.0.0/16\" WAN1SubnetCIDRBlock=\"10.2.1.0/24\" WAN2SubnetCIDRBlock=\"10.2.2.0/24\" WAN3SubnetCIDRBlock=\"10.2.3.0/24\" VIPCIDRBlock=\"10.2.10.0/24\" VIPAddress=\"10.2.10.33/32\" InstanceChoice=\"CiscoCSR1000v\" InstanceType=\"c5.large\" InstanceRequiresReboot=\"false\" CustomAmiId=\"/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2\" CustomUserData=\"\""
+image_repositories = []
