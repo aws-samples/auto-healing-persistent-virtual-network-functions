@@ -23,7 +23,7 @@ Additional complimentary services, such as AWS Identity and Access Management (I
 
 ## Prerequisites to deploy the solution with AWS CloudFormation
 
-This sample code is handled through [AWS Serverless Application Model](https://docs.aws.amazon.com/serverless-application-model/index.html) (SAM), which is an open-source framework that enables you to build serverless applications on AWS, to create resources through a main AWS CloudFormation template in YAML named [nfv_infrastructure_and_vnf.yaml](nfv_infrastructure_and_vnf.yaml). 
+This sample code is handled through [AWS Serverless Application Model](https://docs.aws.amazon.com/serverless-application-model/index.html) (SAM), which is an open-source framework that enables you to build serverless applications on AWS, to create resources through a main AWS CloudFormation template in yml named [nfv_infrastructure_and_vnf.yml](nfv_infrastructure_and_vnf.yml). 
 
 By using AWS SAM, many internal operations are automatically handled and become transparent for the user, such as the creation of an S3 bucket or the upload of the AWS Lambda functions to this bucket, so that they can be used by the architecture. 
 
@@ -45,12 +45,12 @@ Once these steps have been accomplished, you can clone this repository and are r
 
 ## Guided Deployment
 
-This code sample uses AWS SAM to orchestrate the stack deployment, based on [nfv_infrastructure_and_vnf.yaml](nfv_infrastructure_and_vnf.yaml) as the main AWS CloudFormation template. This template creates all AWS resources and you will be billed for them in the specific AWS account.
+This code sample uses AWS SAM to orchestrate the stack deployment, based on [nfv_infrastructure_and_vnf.yml](nfv_infrastructure_and_vnf.yml) as the main AWS CloudFormation template. This template creates all AWS resources and you will be billed for them in the specific AWS account.
 
 The steps to deploy the solution are the following:
 
   1. Navigate to the cloned repository directory, or run ``sam init`` then choose ``Custom Template Location`` and paste the repository URL.
-  2. Build the AWS SAM application by running in your CLI ``sam build -t nfv_infrastructure_and_vnf.yaml``
+  2. Build the AWS SAM application by running in your CLI ``sam build -t nfv_infrastructure_and_vnf.yml``
   3. Deploy the AWS SAM application. Initially, you can opt for a guided deployment with ``sam deploy –guided``. Several parameters are required for the stack instantiation and I recomend to start with default hinted values for each parameter and then fine tune, depending on your use case:
       * **``AvailabilityZones``**: Availability Zones where the VNF can be instantiated as decided by the EC2 Auto Scaling group. You can repeat an AZ if you want to prefer a given AZ selection.
       * **``KeyPair``**: An Amazon EC2 Keypair to directly access the device per SSH, as per prerequisites. This keypair applies to each instance type, and is associated to **ec2-user** username per default in Amazon Linux2, Cisco CSR1000v and Juniper vSRX, and to **jnpr** user in Juniper vMX.
@@ -81,7 +81,7 @@ Because an SNS topic is created, an e-mail will be sent to the **``SnsEmail``** 
 
 During the stack creation time, you will observe that VNF instance creation is delayed for the amount of time specified under **``ASGHealthCheckGracePeriod``**, so this will affect your overall initial solution standup time.
 
-Once you have deployed that stack one, it is no longer needed to build the AWS SAM application again, unless you have changed the the main AWS CloudFormation template. In this case, you do not need to run ``sam init`` or ``sam build -t nfv_infrastructure_and_vnf.yaml`` again in subsequent executions, and it suffices by going through the guided deployment again ``sam deploy –guided`` or ``sam deploy –config-file <sample.toml>``as described in [Advanced Configuration Deployment](#advanced-configuration-deployment)
+Once you have deployed that stack one, it is no longer needed to build the AWS SAM application again, unless you have changed the the main AWS CloudFormation template. In this case, you do not need to run ``sam init`` or ``sam build -t nfv_infrastructure_and_vnf.yml`` again in subsequent executions, and it suffices by going through the guided deployment again ``sam deploy –guided`` or ``sam deploy –config-file <sample.toml>``as described in [Advanced Configuration Deployment](#advanced-configuration-deployment)
 
 ## Sample Deployment Choices
 
@@ -132,7 +132,7 @@ If you start with the ``sam deploy -guided`` command, as described [Guided Deplo
 The steps to deploy the solution with configuration file are the following:
 
   1. Navigate to the cloned repository directory, or run ``sam init`` then choose ``Custom Template Location`` and paste the repository URL.
-  2. Build the AWS SAM application by running in your CLI ``sam build -t nfv_infrastructure_and_vnf.yaml``
+  2. Build the AWS SAM application by running in your CLI ``sam build -t nfv_infrastructure_and_vnf.yml``
   3. Deploy the AWS SAM application. Deploy the application with ``sam deploy –config-file <sample.toml>``, where ``<sample,toml>>`` is the parameter configuration file.
 
 Once the SAM application has been built, if you want to redeploy the stack, it is just enough by repeating Step number 3.
