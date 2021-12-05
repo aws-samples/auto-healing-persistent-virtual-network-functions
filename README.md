@@ -75,13 +75,13 @@ The steps to deploy the solution are the following:
        * **``InstanceRequiresReboot``**: Configuration option (``true`` or ``false``) that enforces a VNF reboot after attaching the VIP Elastic Network Interface (ENI). This depends on the specific VNF behavior, and if it supports dynamically attaching an ENI without requiring restart or not. ``JunipervSRX`` and ``JunipervMX`` have been tested requiring a restart after dynamic interface attachment (``true``), others like ``CiscoCSR1000v`` or a plain Amazon Linux2 instance can dynamically incorporate additional ENIs without requiring a reboot (``false``))
        * **``CustomUserData``**: Optional free text field to enter User Data whenever a custom instance is selected (only needed if the VNF is neither ``CiscoCSR1000v`` , nor  ``JunipervSRX``, nor ``JunipervMX``, because basic User Data is provided in those cases).
 
-You can see some sample deployment choices under [Sample Deployment Choices](#sample-deployment-choices). The SAM deployment will ask you to confirm the stack creation with those parameters and it gives you the option to save these entered parameters in a local ``.toml`` file that can be reused later (see [Advanced Configuration Deployment](#advanced-configuration-deployment)). It takes approximately 10 minutes to complete the execution.
+You can see some sample deployment choices under [Sample Deployment Choices](#sample-deployment-choices). The SAM deployment will ask you to confirm the stack creation with those parameters and it gives you the option to save these entered parameters in a local ``.toml`` file that can be reused later (see [Advanced Configuration Deployment](#advanced-configuration-deployment)). The execution takes approximately 10 minutes to complete.
 
-Because an SNS topic is created, an e-mail will be sent to the **``SnsEmail``** Parameter value to confirm SNS subscription and send events, so you would need to accept that to receive notifications.
+Because an SNS topic is created, an e-mail will be sent to the **``SnsEmail``** Parameter value to confirm the SNS subscription and to notify subsequent events. You would need to accept an initial notification to that e-mail upon stack creation, in order to be able to receive notifications for further events.
 
-During the stack creation time, you will observe that VNF instance creation is delayed for the amount of time specified under **``ASGHealthCheckGracePeriod``**, so this will affect your overall initial solution standup time.
+During the stack creation time, you will observe that the VNF instance creation is delayed for the amount of time specified under **``ASGHealthCheckGracePeriod``**, so this will affect your overall initial solution standup time.
 
-Once you have deployed that stack one, it is no longer needed to build the AWS SAM application again, unless you have changed the the main AWS CloudFormation template. In this case, you do not need to run ``sam init`` or ``sam build -t nfv_infrastructure_and_vnf.yml`` again in subsequent executions, and it suffices by going through the guided deployment again ``sam deploy –guided`` or ``sam deploy –config-file <sample.toml>``as described in [Advanced Configuration Deployment](#advanced-configuration-deployment)
+Once you have deployed that stack first, it is no longer needed to build the AWS SAM application again, unless you have changed the main AWS CloudFormation template. In this case, you do not need to run ``sam init`` or ``sam build -t nfv_infrastructure_and_vnf.yml`` again in later executions, and it suffices by going through the guided deployment again ``sam deploy –guided`` or ``sam deploy –config-file <sample.toml>``as described in [Advanced Configuration Deployment](#advanced-configuration-deployment)
 
 ## Sample Deployment Choices
 
@@ -89,7 +89,7 @@ Once you have deployed that stack one, it is no longer needed to build the AWS S
 
 This is a screenshot from a sample SAM deployment for an Amazon Linux2 instance. Note how the default ``eu-west-1`` region has been assumed for the deployment, together with default IPv4 address setings. 
 
-Amazon Linux2 is selected because the ``InstanceChoice`` parameter remains ``Custom`` and the ``CustomAmiId`` field has not been modified to point to any specific AWS Systems Manager Parameter Store where a specific AMI Id would be saved, and defaults to the Amazon Linux2 default path.
+Amazon Linux2 is selected by default, because the ``InstanceChoice`` parameter remains ``Custom`` and the ``CustomAmiId`` field has not been modified to point to any specific AWS Systems Manager Parameter Store where a specific AMI Id would be saved, and defaults to the Amazon Linux2 default path.
 
 Note how specific bootstrap User Data is base64-encoded and entered within the ``CustomUserData`` field. For further details about this, please check https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-add-user-data.html  
 
@@ -97,11 +97,11 @@ Note how specific bootstrap User Data is base64-encoded and entered within the `
 
 ### Sample SAM guided Cisco CSR1000v deployment
 
-This is another sample SAM deployment screenshot for a Cisco CSR1000v instance. In this particular case, the specific deployment is achieved in the ``us-east-1`` AWS Region, and it includes 3 of its Availability Zones (AZs). You can repeat the same Availability Zone value across the 3 parameters, if you want to reduce their eligibility, or even enter the same one for the 3 parameters, if oyou want to only leverage one AZ.
+This is another sample SAM deployment screenshot for a Cisco CSR1000v instance. In this particular case, the specific deployment is achieved in the ``us-east-1`` AWS Region, and it includes 3 of its Availability Zones (AZs). You can repeat the same Availability Zone value across the 3 parameters, if you want to reduce their eligibility, or even enter the same one for the 3 parameters, if you want to only leverage one AZ.
 
 Specific CIDR ranges for the complete VPC and all subnets are entered, together with the VIP value for the persistent private IPv4 address.
 
-The ``InstanceChoice`` value needs to be explicitly``CiscoCSR1000v`` and then the ``CustomAmiId`` and ``CustomeUserData`` parameter values remain irrelevant. ``InstanceType`` is ``c5.large`` as per default vendor recommendation.
+The ``InstanceChoice`` value needs to be explicitly configured as ``CiscoCSR1000v`` and then the ``CustomAmiId`` and ``CustomeUserData`` parameter values do not apply. ``InstanceType`` is ``c5.large`` as per default vendor recommendation.
 
 ![Sample SAM guided Cisco CSR1000v deployment](sample_configs/test-cisco-guided.png)
 
@@ -109,23 +109,23 @@ The ``InstanceChoice`` value needs to be explicitly``CiscoCSR1000v`` and then th
 
 This is another sample SAM deployment screenshot for a Juniper vSRX instance. Note how the default ``eu-west-1`` region has been assumed for the deployment, together with default IPv4 address setings. 
 
-The ``InstanceChoice`` value needs to be explicitly``JunipervSRX`` and then the ``CustomAmiId`` and ``CustomeUserData`` parameter values remain irrelevant.  ``InstanceType`` is ``c5.large`` as per default vendor recommendation.
+The ``InstanceChoice`` value needs to be explicitly set to ``JunipervSRX`` and then the ``CustomAmiId`` and ``CustomeUserData`` parameter values do not apply.  ``InstanceType`` is ``c5.large`` as per default vendor recommendation.
 
 ![Sample SAM guided Juniper vSRX deployment](sample_configs/test-vsrx-guided.png)
 
 ### Sample SAM guided Juniper vMX deployment
 
-This is another sample SAM deployment screenshot for a Juniper vSRX instance. In this particular case, the specific deployment is achieved in the ``us-central-1`` AWS Region, and it includes 3 of its Availability Zones (AZs).
+This is another sample SAM deployment screenshot for a Juniper vMX instance. In this particular case, the specific deployment is carried out in the ``us-central-1`` AWS Region, and it includes 3 of its Availability Zones (AZs).
 
 Specific CIDR ranges for the complete VPC and all subnets are entered, together with the VIP value for the persistent private IPv4 address.
 
-The ``InstanceChoice`` value needs to be explicitly``JunipervMX`` and then the ``CustomAmiId`` and ``CustomeUserData`` parameter values remain irrelevant.  ``InstanceType`` is ``c5.4xlarge`` as per default vendor recommendation.
+The ``InstanceChoice`` value needs to be explicitly``JunipervMX`` and then the ``CustomAmiId`` and ``CustomeUserData`` parameter values do not apply.  ``InstanceType`` is ``c5.4xlarge`` as per default vendor recommendation.
 
 ![Sample SAM guided Juniper vMX deployment](sample_configs/test-vmx-guided.png)
 
 ## Advanced Configuration Deployment
 
-The AWS SAM CLI also supports a project-level [configuration file](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-config.html) that stores default parameters for its commands. This configuration file is in the [TOML](https://docs.aws.amazon.com/serverless-application-model/index.html) file format and you can achieve a more programmatic deployment approach using it.
+The AWS SAM CLI also supports a project-level [configuration file](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-config.html) that stores default parameters for its commands. This configuration file is in the [TOML](https://toml.io/en/) file format and you can achieve a more programmatic deployment approach using it with AWS SAM.
 
 If you start with the ``sam deploy -guided`` command, as described [Guided Deployment](#guided-deployment), you can enable the option to write the subset of parameters to your configuration file, named ``samconfig.toml`` per default and stored locally in the same project's root directory path. During subsequent deployment executions, you can directly launch this sample from that configuration file using the ``-config-file`` parameter, instead of going through the menu for the parameter selection. You can manually edit this file to change the Parameter values and handle this deployment with a more programmatic approach.
 
@@ -143,7 +143,7 @@ The [sample_configs](sample_configs/) directory includes sample ``.toml`` config
 
 To delete the complete scenario, I recommend to directly attempt deletion of the AWS CloudFormation stack created by the AWS SAM application. 
 
-This deletion attempt will take several minutes and will not be an empty cleanup, because the secondary persistent ENI is created by the Lambda function and becomes part of the environment, but was not created first by the SAM application stack. The CloudFormation stack deletion will not be first completely successful because this resource was not created by CloudFormation before. Upon drift detection, I recommend to force delete the AWS CloudFormation stack again, skipping remnant resources in the VPC. You can then remove them manually afterwards, mostly this secondary persistent ENI and other depending resources, such as Route Tables and VPCs.
+This deletion attempt will take several minutes and will not be an empty cleanup, because the secondary persistent ENI is created by the Lambda function and becomes part of the environment, but was not created first by the SAM application stack. The AWS CloudFormation stack deletion will not be first completely successful because this resource was not created by AWS CloudFormation before. Upon drift detection, I recommend to force delete the AWS CloudFormation stack again, skipping remnant resources in the VPC. You can then remove them manually afterwards, mostly this secondary persistent ENI and other depending resources, such as Route Tables and VPCs.
 
 # Security
 
