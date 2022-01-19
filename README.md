@@ -21,35 +21,58 @@ The following diagram represents this sample topology that includes the followin
 
 Additional complimentary services, such as *AWS Identity and Access Management (IAM)* Roles and Policies, and *Amazon Virtual Private Cloud (VPC)* resources, like Subnets, Route Tables, Endpoints and Elastic IP Address (EIP) are created as needed to support the architecture.
 
-## Prerequisites to deploy the solution with AWS CloudFormation
+## Deployment Prerequisites
 
-This sample code is handled through [AWS Serverless Application Model](https://docs.aws.amazon.com/serverless-application-model/index.html) (SAM), which is an open-source framework that enables you to build serverless applications on AWS, to create resources through a main AWS CloudFormation template in [YAML](https://yaml.org/) named [nfv_infrastructure_and_vnf.yml](nfv_infrastructure_and_vnf.yml). 
+This sample code is handled through [AWS Serverless Application Model](https://docs.aws.amazon.com/serverless-application-model/index.html) (SAM), which is an open-source framework that enables you to build serverless applications on AWS and creates resources through a main AWS CloudFormation template in [YAML](https://yaml.org/), named [nfv_infrastructure_and_vnf.yml](nfv_infrastructure_and_vnf.yml) in this repository.
 
 By using AWS SAM, many internal operations are automatically handled and become transparent for the user, such as the creation of an S3 bucket or the upload of the AWS Lambda functions to this bucket, so that they can be used by the architecture. 
 
 Before deploying the stack with AWS SAM, the following prerequisites must be fulfilled:
 
-* Obtain access to an AWS account and IAM credentials that provide the necessary permissions to create resources mentioned in the [Summary](#summary) section. This example assumes *AdministratorAccess* credentials and corresponding environment variables set in the CLI.
-* Install the [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html) in your client computer  
-* Create an [Amazon EC2 KeyPair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html) that may be used for secure instance access via SSH
-* Identify the IPv4 CIDR range that may cover the source address segment that may be used for direct SSH access, if this is enabled by the user
-* Decide which type of VNF you want to use, which will determine the instance image. This can be a custom *Amazon Machine Image (AMI)* or some other images from the AWS Marketplace. In the latter case, AMIs for these sample vendors are preloaded and it is just required to accept and subscribe to the corresponding software package in the AWS Marketplace as first step, namely:
+### 1. AWS account credentials and permissions
+
+Obtain access to an AWS account and IAM credentials that provide the necessary permissions to create resources mentioned in the [Summary](#summary) section. This example assumes *AdministratorAccess* credentials and corresponding [environment variables](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-getting-started-set-up-credentials.html) set in the CLI, which will include AWS Access Key ID and AWS Secret Access Key.
+
+### 2. AWS Serverless Application Model (SAM) CLI installation
+
+Install the [AWS SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html) in your client computer. This installation is available for [Linux](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install-linux.html), [Windows](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install-windows.html) and [macOS](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install-mac.html), and includes the enforcement of the AWS account environment installation, an optional Docker installation and the SAM CLI package installation itself.  
+
+### 3. Resource planning 
+
+Create an [Amazon EC2 KeyPair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html) within the AWS account, that may be used for secure instance access via SSH. 
+
+Decide if direct SSH access to the VNF is required (*AWS Systems Manager* access is enabled through the corresponding IAM role and profile, but the VNF would need to support that), and if enabled, identify the IPv4 CIDR range that may cover the source address segment that may be used for direct SSH access.
+
+Evaluate values to be used for the parameters as explained at [Guided Deployment](#guided-deployment) and decide which type of VNF you want to use, which will determine the instance image. This can be a custom *Amazon Machine Image (AMI)* or some other images preloaded in this sample from [Cisco Systems CSR1000v](https://aws.amazon.com/marketplace/pp/prodview-tinibseuanup2?ref_=aws-mp-console-subscription-detail), [Juniper Networks virtual SRX (vSRX)](https://aws.amazon.com/marketplace/pp/B01LYWCGDX?ref_=aws-mp-console-subscription-detail) or [Juniper Networks virtual MX (vMX)](https://aws.amazon.com/marketplace/pp/B01LXLJMG7?ref_=aws-mp-console-subscription-detail) routers as the VNFs.
+
+### 4. AWS Marketplace subscription
+
+If you do not want to use your own custom *Amazon Machine Image (AMI)* or default latest Amazon2 Linux AMI, you can select preloaded [Cisco Systems CSR1000v](https://aws.amazon.com/marketplace/pp/prodview-tinibseuanup2?ref_=aws-mp-console-subscription-detail), [Juniper Networks virtual SRX (vSRX)](https://aws.amazon.com/marketplace/pp/B01LYWCGDX?ref_=aws-mp-console-subscription-detail) or [Juniper Networks virtual MX (vMX)](https://aws.amazon.com/marketplace/pp/B01LXLJMG7?ref_=aws-mp-console-subscription-detail) routers as the VNFs. AMIs for these sample vendors are preloaded and it just required to accept and subscribe to the corresponding software package in the [AWS Marketplace](https://aws.amazon.com/marketplace).
+
+The [AWS Marketplace](https://aws.amazon.com/marketplace) is an online store where Independent Software Vendors (ISVs) and consulting partners can sell their solutions that run on AWS. This provides a new sales channels for AWS users to find, buy and immediately start using software or services from 3rd parties, but implemented on AWS. 
+
+For this sample code, the following AWS Marketplace subscriptions are required in either case:
   * **Cisco CSR1000v BYOL**: https://aws.amazon.com/marketplace/pp/prodview-tinibseuanup2?ref_=aws-mp-console-subscription-detail
   * **Juniper vSRX BYOL**: https://aws.amazon.com/marketplace/pp/B01LYWCGDX?ref_=aws-mp-console-subscription-detail
   * **Juniper vMX BYOL**: https://aws.amazon.com/marketplace/pp/B01LXLJMG7?ref_=aws-mp-console-subscription-detail
+  
+First, click one of the previous links for the corresponding VNF and you will land in the Product Overview page at the AWS Marketplace, such as:
 
-* Once accepted and if the subscription has been confirmed, the respective instance type can be used and selected for the stack. You may also need to decide if you want to allow direct SSH access to the instance or not (*AWS Systems Manager* access is enabled through the corresponding IAM role and profile, but the VNF would need to support that).
+![Juniper Networks vSRX subscription in the AWS Marketplace](diagrams/AWS_marketplace_vSRX.jpg)
 
-Once these steps have been accomplished, you can clone this repository and are ready to deploy the stack with AWS SAM in you preferred region.
+Further down in the same page, you can see the recommended image size and estimated costs. This software package also allows you to select different instance type sizes and you can see here the pricing estimations for each one of them. Note that these preloaded products are using using Bring-Your-Own-License (BYOL) versions for these vendors, so the pricing estimations just include the compute costs and do not consider the specific licenses, as it is expected that the user will bring and enforce each one in each system separately.
 
+![Juniper Networks vSRX pricing estimation in the AWS Marketplace](diagrams/AWS_marketplace_vSRX2.jpg)
+
+Just click on ‘Continue to Subscribe’ and follow the next steps. Once accepted and if the subscription has been confirmed, the respective instance type can be used and selected for the stack. 
 
 ## Guided Deployment
 
 This code sample uses AWS SAM to orchestrate the stack deployment, based on [nfv_infrastructure_and_vnf.yml](nfv_infrastructure_and_vnf.yml) as the main *AWS CloudFormation* template. This template creates all AWS resources and you will be billed for them in the specific AWS account.
 
-The steps to deploy the solution are the following:
+Once all prerequesites described at [Deployment Prerequisites](#deployment-prerequisites) have been fulfilled, you are ready to deploy the solution following these steps:
 
-  1. Navigate to the cloned repository directory, or run ``sam init`` then choose ``Custom Template Location`` and paste the repository URL.
+  1. Run ``sam init`` then choose ``Custom Template Location`` and paste the repository URL, which will clone this repository locally.
   2. Build the AWS SAM application by running in your CLI ``sam build -t nfv_infrastructure_and_vnf.yml``
   3. Deploy the AWS SAM application. Initially, you can opt for a guided deployment with ``sam deploy –guided``. Several parameters are required for the stack instantiation and I recomend to start with default hinted values for each parameter and then fine tune, depending on your use case:
       * **``AvailabilityZones``**: Availability Zones where the VNF can be instantiated as decided by the EC2 Auto Scaling group. You can repeat an AZ if you want to increase preference weight for a given AZ selection.
@@ -133,7 +156,7 @@ The steps to deploy the solution with configuration file are the following:
 
   1. Navigate to the cloned repository directory, or run ``sam init`` then choose ``Custom Template Location`` and paste the repository URL.
   2. Build the AWS SAM application by running in your CLI ``sam build -t nfv_infrastructure_and_vnf.yml``
-  3. Deploy the AWS SAM application. Deploy the application with ``sam deploy –config-file <sample.toml>``, where ``<sample,toml>>`` is the parameter configuration file.
+  3. Deploy the AWS SAM application. Deploy the application with ``sam deploy –config-file <sample.toml>``, where ``<sample.toml>>`` is the parameter configuration file.
 
 Once the SAM application has been built, if you want to redeploy the stack, it is just enough by repeating step number 3.
 
@@ -141,9 +164,11 @@ The [sample_configs](sample_configs/) directory includes sample ``.toml`` config
 
 ## Cleanup
 
-To delete the complete scenario, I recommend to directly attempt deletion of the AWS CloudFormation stack created by the AWS SAM application. 
+To delete the complete scenario, I recommend to directly delete the AWS CloudFormation stack created by the AWS SAM application. 
 
-This deletion attempt will take several minutes and will not be an empty cleanup, because the secondary persistent ENI is created by the Lambda function and becomes part of the environment, but was not created first by the SAM application stack. The AWS CloudFormation stack deletion will not be first completely successful because this resource was not created by AWS CloudFormation before. Upon drift detection, I recommend to force delete the AWS CloudFormation stack again, skipping remnant resources in the VPC. You can then remove them manually afterwards, mostly this secondary persistent ENI and other depending resources, such as Route Tables and VPCs.
+This deletion attempt will take several minutes and will not be an empty cleanup, because the secondary persistent ENI is created by the Lambda function and becomes part of the environment, but was not created first by the SAM application stack. The AWS CloudFormation stack deletion will not be first completely successful and will remain in DELETE_FAILED status, because this resource was not created by AWS CloudFormation before. 
+
+Next, I recommend to follow the steps to [force delete](https://aws.amazon.com/premiumsupport/knowledge-center/cloudformation-stack-delete-failed/) the AWS CloudFormation stack again, skipping remnant resources in the VPC, and then remove these remnant VPC and Route Table manually afterwards.
 
 # Security
 
