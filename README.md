@@ -58,11 +58,12 @@ For this sample code, the following AWS Marketplace subscriptions are required i
   
 First, click one of the previous links for the corresponding VNF and you will land in the Product Overview page at the AWS Marketplace, such as:
 
-![Juniper Networks vSRX subscription in the AWS Marketplace](diagrams/AWS_marketplace_vSRX.jpg)
+<img src="diagrams/AWS_marketplace_vSRX.jpg" alt="Juniper Networks vSRX subscription in the AWS Marketplace" width="800"/>
 
 Further down in the same page, you can see the recommended image size and estimated costs. This software package also allows you to select different instance type sizes and you can see here the pricing estimations for each one of them. Note that these preloaded products are using using Bring-Your-Own-License (BYOL) versions for these vendors, so the pricing estimations just include the compute costs and do not consider the specific licenses, as it is expected that the user will bring and enforce each one in each system separately.
 
-![Juniper Networks vSRX pricing estimation in the AWS Marketplace](diagrams/AWS_marketplace_vSRX2.jpg)
+<img src="diagrams/AWS_marketplace_vSRX2.jpg" alt="Juniper Networks vSRX pricing estimation in the AWS Marketplace" width="800"/>
+
 
 Just click on ‘Continue to Subscribe’ and follow the next steps. Once accepted and if the subscription has been confirmed, the respective instance type can be used and selected for the stack. 
 
