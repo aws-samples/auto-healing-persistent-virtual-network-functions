@@ -45,27 +45,12 @@ except Exception as e:
 def create(event, context):
     LambdaInfoTracing = str(event['ResourceProperties']['LambdaInfoTracing'])
     infolog("cleanup -- custom-resource create call",LambdaInfoTracing)
-    # Optionally return an ID that will be used for the resource PhysicalResourceId, 
-    # if None is returned an ID will be generated. If a poll_create function is defined 
-    # return value is placed into the poll event as event['CrHelperData']['PhysicalResourceId']
-    #
-    # To add response data update the helper.Data dict
-    # If poll is enabled data is placed into poll event as event['CrHelperData']
-    #helper.Data.update({"test": "testdata"})
-
-    # To return an error to cloudformation you raise an exception:
-    #if not helper.Data.get("test"):
-    #    raise ValueError("this error will show in the cloudformation events log and console.")
-    
-    #return "MyResourceId"
 
 
 @helper.update
 def update(event, context):
     LambdaInfoTracing = str(event['ResourceProperties']['LambdaInfoTracing'])
     infolog("cleanup -- custom-resource update call",LambdaInfoTracing)
-    # If the update resulted in a new resource being created, return an id for the new resource. 
-    # CloudFormation will send a delete event with the old id when stack update completes
 
 
 @helper.delete
