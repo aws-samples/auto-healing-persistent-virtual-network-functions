@@ -90,7 +90,7 @@ Once all prerequesites described at [Deployment Prerequisites](#deployment-prere
          * For ``JunipervSRX`` VNF: ``600``
          * For ``JunipervMX`` VNF: ``1020``
        * **``ASGUpdateHealthCheckGraceTime``**: Grace time (in seconds) after creation of ASG Lifecycle Hooks and before launching first instance. It is recommended to start with the default hinted value (``120``) as a minimum and you can adjust it afterwards.
-       * **``SubnetCreationAttempts``**: Number of attempts to create the VIP subnet within same Lifecycle Launch stage. As this also depends on the bootup time of each instance, it is recommended to start with the default hinted value (``6``) as a minimum and you can adjust it afterwards.
+       * **``SubnetCreationAttempts``**: Number of attempts to create the VIP subnet within same Lifecycle Launch stage. As this also depends on the bootup time of each instance, it is recommended to start with the default hinted value (``10``) as a minimum and you can adjust it afterwards.
        * **``VPCCIDRBlock``**: The overall CIDR Block for the VPC 
        * **``WANSubnetCIDRBlocks``**: specific CIDR Blocks for WAN Subnets in each AZ, they need to be included within the overall VPC CIDR block
        * **``VIPCIDRBlock``**: The specific CIDR Block for the subnet segment to attach and detach. This moves along with the instance and therefore provides persistent IPv4 reachability to the VNF.
@@ -177,7 +177,7 @@ These actions interrupt default health checks from the EC2 Auto Scaling group, w
 
 ## Cleanup
 
-Delete the AWS SAM application with ``sam delete –-stack-name <stack-name>`` or the underlying AWS CloudFormation stack by deleting it from the AWS CloudFormation management console. 
+Delete the AWS SAM application with ``sam delete –-stack-name <stack-name> --region <region>`` or the underlying AWS CloudFormation stack by deleting it from the AWS CloudFormation management console. 
 
 This operation triggers the stack resource deletion, including the usage of [AWS CloudFormation Custom Resources](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-custom-resources.html) with the [Custom Resource Helper](https://github.com/aws-cloudformation/custom-resource-helper) package and [Lambda layers](https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html) for the code dependencies. 
 
