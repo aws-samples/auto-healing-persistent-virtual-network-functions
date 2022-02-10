@@ -16,6 +16,7 @@ The following diagram represents this sample topology that includes the followin
 * An *Amazon CloudWatch* or *EventBridge Event* that uses such Lifecycle Hooks as triggers and that AWS Lambda function as destination to manage the lifecycle of an ENI
 * Another pair of *Amazon CloudWatch* or *EventBridge Event* and *AWS Lambda function* to address the very first warmup period for the EC2 Auto Scaling Group after its definition, and updates its desired capacity to 1 to trigger the process
 * An *Amazon Simple Notification Service (SNS)* topic for event notification
+* *AWS CloudFormation Custom Resources* based on an *AWS Lambda function* and *Lambda layers* for a comprehensive resource deletion.
 
 ![Auto-healing persistent VNF in an AWS Region](diagrams/High_Level_Design.jpg)
 
@@ -31,7 +32,7 @@ Before deploying the stack with AWS SAM, the following prerequisites must be ful
 
 ### 1. AWS account credentials and permissions
 
-Obtain access to an AWS account and IAM credentials that provide the necessary permissions to create resources mentioned in the [Summary](#summary) section. This example assumes *AdministratorAccess* credentials and corresponding [environment variables](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-getting-started-set-up-credentials.html) set in the CLI, which will include AWS Access Key ID and AWS Secret Access Key.
+Obtain access to an AWS account and IAM credentials that provide the necessary permissions to create resources mentioned in the [Summary](#summary) section. Deploying this solution requires IAM permissions equivalent to the following managed IAM policies: *AmazonEC2FullAccess*, *IAMFullAccess*, *AutoScalingFullAccess*, *AmazonS3FullAccess*, *AmazonVPCFullAccess*, *AmazonSSMReadOnlyAccess*, *AmazonSNSFullAccess*, *CloudWatchEventsFullAccess*, *AWSCloudFormationFullAccess* and *AWSLambda_FullAccess*. You can create your specific IAM user with these IAM managed policies or the equivalent permissionss and set the corresponding [environment variables](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-getting-started-set-up-credentials.html) in the CLI, which will include AWS Access Key ID and AWS Secret Access Key.
 
 ### 2. AWS Serverless Application Model (SAM) CLI installation
 
@@ -69,11 +70,11 @@ Just click on ‘Continue to Subscribe’ and follow the next steps. Once accept
 
 ## Guided Deployment
 
-This code sample uses AWS SAM to orchestrate the stack deployment, based on [nfv_infrastructure_and_vnf.yml](nfv_infrastructure_and_vnf.yml) as the main *AWS CloudFormation* template. This template creates all AWS resources and you will be billed for them in the specific AWS account.
+This code sample uses AWS SAM to orchestrate the stack deployment, based on [nfv_infrastructure_and_vnf.yml](nfv_infrastructure_and_vnf.yml) as the main *AWS CloudFormation* template. The code package also includes python files under the [src](src) directory for the AWS Lambda functions, sample deployment configurations under [sample_configs](sample_configs) and other diagrams under [diagrams](diagrams). This template creates all AWS resources and you will be billed for them in the specific AWS account.
 
 Once all prerequesites described at [Deployment Prerequisites](#deployment-prerequisites) have been fulfilled, you are ready to deploy the solution following these steps:
 
-  1. Run ``sam init`` then choose ``Custom Template Location`` and paste the repository URL, which will clone this repository locally.
+  1. Run ``sam init`` then choose ``Custom Template Location`` and paste this repository URL, which will clone this repository locally.
   2. Build the AWS SAM application by running in your CLI ``sam build -t nfv_infrastructure_and_vnf.yml``
   3. Deploy the AWS SAM application. Initially, you can opt for a guided deployment with ``sam deploy –guided``. Several parameters are required for the stack instantiation and I recomend to start with default hinted values for each parameter and then fine tune, depending on your use case:
       * **``AvailabilityZones``**: Availability Zones where the VNF can be instantiated as decided by the EC2 Auto Scaling group. You can repeat an AZ if you want to increase preference weight for a given AZ selection.
@@ -89,7 +90,7 @@ Once all prerequesites described at [Deployment Prerequisites](#deployment-prere
          * For ``JunipervSRX`` VNF: ``600``
          * For ``JunipervMX`` VNF: ``1020``
        * **``ASGUpdateHealthCheckGraceTime``**: Grace time (in seconds) after creation of ASG Lifecycle Hooks and before launching first instance. It is recommended to start with the default hinted value (``120``) as a minimum and you can adjust it afterwards.
-       * **``SubnetCreationAttempts``**: Number of attempts to create the VIP subnet within same Lifecycle Launch stage. As this also depends on the bootup time of each instance, it is recommended to start with the default hinted value (``6``) as a minimum and you can adjust it afterwards.
+       * **``SubnetCreationAttempts``**: Number of attempts to create the VIP subnet within same Lifecycle Launch stage. As this also depends on the bootup time of each instance, it is recommended to start with the default hinted value (``10``) as a minimum and you can adjust it afterwards.
        * **``VPCCIDRBlock``**: The overall CIDR Block for the VPC 
        * **``WANSubnetCIDRBlocks``**: specific CIDR Blocks for WAN Subnets in each AZ, they need to be included within the overall VPC CIDR block
        * **``VIPCIDRBlock``**: The specific CIDR Block for the subnet segment to attach and detach. This moves along with the instance and therefore provides persistent IPv4 reachability to the VNF.
@@ -163,13 +164,23 @@ Once the SAM application has been built, if you want to redeploy the stack, it i
 
 The [sample_configs](sample_configs/) directory includes sample ``.toml`` configuration files for the same representative examples described before in [Sample Deployment Choices](#sample-deployment-choices). These example files have a wide open source IPv4 range (``0.0.0.0/0``), which would not be recommended for production deployments, the S3 bucket prefix for SAM CLI has been replaced with ``<your-s3-bucket-for-SAM-cli>`` and a fake e-mail address (``foo@foo.bar``) has been set for SNS notifications, so replace these parameter values with yours before deployment.  
 
+## Testing
+
+Once the stack has been completely deployed and the secondary interface has been attached to the VNF, the VNF can undergo functional testing for its specific configuration.
+
+If you want to test the solution self-healing and persistent behavior, you can force VNF health check failures and observe the restoration workflow. This can be done in multiple ways, such as
+1.	By terminating the EC2 instance directly from the AWS management console
+2.	By blocking default Auto Scaling group health checks 
+3.	By logging into the VNF and shutting down or deleting the interfaces
+
+These actions interrupt default health checks from the EC2 Auto Scaling group, which moves the instance into Terminating state. This triggers the ``EC2_INSTANCE_TERMINATING`` lifecycle hook with its sequence of events and the EC2 instance relaunch, as explained in the previous section.   
+
 ## Cleanup
 
-To delete the complete scenario, I recommend to directly delete the AWS CloudFormation stack created by the AWS SAM application. 
+Delete the AWS SAM application with ``sam delete –-stack-name <stack-name> --region <region>`` or the underlying AWS CloudFormation stack by deleting it from the AWS CloudFormation management console. 
 
-This deletion attempt will take several minutes and will not be an empty cleanup, because the secondary persistent ENI is created by the Lambda function and becomes part of the environment, but was not created first by the SAM application stack. The AWS CloudFormation stack deletion will not be first completely successful and will remain in DELETE_FAILED status, because this resource was not created by AWS CloudFormation before. 
+This operation triggers the stack resource deletion, including the usage of [AWS CloudFormation Custom Resources](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-custom-resources.html) with the [Custom Resource Helper](https://github.com/aws-cloudformation/custom-resource-helper) package and [Lambda layers](https://docs.aws.amazon.com/lambda/latest/dg/configuration-layers.html) for the code dependencies. 
 
-Next, I recommend to follow the steps to [force delete](https://aws.amazon.com/premiumsupport/knowledge-center/cloudformation-stack-delete-failed/) the AWS CloudFormation stack again, skipping remnant resources in the VPC, and then remove these remnant VPC and Route Table manually afterwards.
 
 # Security
 

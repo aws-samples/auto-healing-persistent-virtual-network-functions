@@ -1345,6 +1345,203 @@ Resources:
           LambdaInfoTracing: !Ref LambdaInfoTracing
           AutoScalingGroupName: !Ref ASG
       
+  # Lambda Function and Custom Resource for cleanup
+  LambdaCleanup:
+    Type: AWS::Serverless::Function
+    DependsOn: PolicyLambdaAttach2ndEniCfn
+    Properties:
+      Runtime: "python3.8"
+      Handler: cleanup.lambda_handler
+      Role: !GetAtt RoleLambdaAttach2ndEniCfn.Arn
+      CodeUri: src/
+      Timeout: 600
+      Layers:
+      - !Ref PipLayer
+  CustomCleanup:
+    Type: Custom::Cleanup
+    Properties:
+      ServiceToken: !GetAtt 'LambdaCleanup.Arn' 
+      VPCId: !Ref VPC
+      VIPCIDRBlock: !Ref VIPCIDRBlock
+      WANRouteTable: !Ref WANRouteTable
+      VIPAddress: !Ref VIPAddress
+      EIPAddress: !Ref InstanceEIPWAN
+      EIPAllocationId: 
+        Fn::GetAtt:
+          - InstanceEIPWAN
+          - AllocationId
+      LambdaInfoTracing: !Ref LambdaInfoTracing
+
+# Lambda Layer for crnhelper pip installation, including role and auxiliary file
+  PipLayerLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                Effect: Allow
+                Resource:
+                  - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/PipLayer-${AWS::StackName}:*
+              - Action:
+                - lambda:PublishLayerVersion
+                - lambda:DeleteLayerVersion
+                Effect: Allow
+                Resource:
+                  - "*"
+          PolicyName: lambda
+
+  PipLayerLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Create layers based on pip
+      FunctionName: !Sub "PipLayer-${AWS::StackName}"
+      Handler: index.handler
+      MemorySize: 1024
+      Role: !GetAtt PipLayerLambdaRole.Arn
+      Runtime: "python3.8"
+      Timeout: 300
+      Environment:
+        Variables:
+          LambdaInfoTracing: !Ref LambdaInfoTracing
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import pathlib
+          import re
+          import subprocess
+          import sys
+          import tempfile
+          import typing as t
+          import shutil
+          import cfnresponse
+          import boto3
+          import os
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          class PipLayerException(Exception):
+              pass
+          def _create(properties,LambdaInfoTracing) -> t.Tuple[str, t.Mapping[str, str]]:
+              try:
+                  layername = properties["LayerName"]
+                  description = properties.get("Description", "PipLayer")
+                  packages = properties["Packages"]
+              except KeyError as e:
+                  raise PipLayerException("Missing parameter: %s" % e.args[0])
+              description += " ({})".format(", ".join(packages))
+              if not isinstance(layername, str):
+                  raise PipLayerException("LayerName must be a string")
+              if not isinstance(description, str):
+                  raise PipLayerException("Description must be a string")
+              if not isinstance(packages, list) or not all(isinstance(p, str) for p in packages):
+                  raise PipLayerException("Packages must be a list of strings")
+              tempdir = pathlib.Path(tempfile.TemporaryDirectory().name) / "python"
+              try:
+                  subprocess.check_call([
+                      sys.executable, "-m", "pip", "install", *packages, "-t", tempdir])
+              except subprocess.CalledProcessError:
+                  raise PipLayerException("Error while installing %s" % str(packages))
+              zipfilename = pathlib.Path(tempfile.NamedTemporaryFile(suffix=".zip").name)
+              shutil.make_archive(
+                  zipfilename.with_suffix(""), format="zip", root_dir=tempdir.parent)
+              client = boto3.client("lambda")
+              layer = client.publish_layer_version(
+                  LayerName=layername,
+                  Description=description,
+                  Content={"ZipFile": zipfilename.read_bytes()},
+                  CompatibleRuntimes=["python%d.%d" % sys.version_info[:2]],
+              )
+              infolog("PipLayer -- Created layer {}".format(str(layer["LayerVersionArn"])),LambdaInfoTracing)
+              return (layer["LayerVersionArn"], {})
+          def _delete(physical_id,LambdaInfoTracing):
+              match = re.fullmatch(
+                  r"arn:aws:lambda:(?P<region>[^:]+):(?P<account>\d+):layer:"
+                  r"(?P<layername>[^:]+):(?P<version_number>\d+)", physical_id)
+              if not match:
+                  infolog("PipLayer -- Warning: Not deleting, cannot parse physical id {}".format(str(physical_id)),LambdaInfoTracing)
+                  return
+              layername = match.group("layername")
+              version_number = int(match.group("version_number"))
+              infolog("PipLayer -- Now deleting layer {}".format(str(layername)),LambdaInfoTracing)
+              client = boto3.client("lambda")
+              deletion = client.delete_layer_version(
+                  LayerName=layername,
+                  VersionNumber=version_number)
+              infolog("PipLayer -- Deletion done",LambdaInfoTracing)
+          def handler(event, context):
+              LambdaInfoTracing = str(os.environ['LambdaInfoTracing'])
+              infolog("PipLayer -- Complete Event: {}".format(str(json.dumps(event))),LambdaInfoTracing)
+              try:
+                  if event["RequestType"].upper() in ("CREATE", "UPDATE"):
+                      # Note: treat UPDATE as CREATE; it will create a new physical ID,
+                      # signalling CloudFormation that it's a replace and the old should be
+                      # deleted
+                      physicalId, attributes = _create(event["ResourceProperties"],LambdaInfoTracing)
+                      cfnresponse.send(
+                          event=event,
+                          context=context,
+                          responseData=attributes,
+                          responseStatus=cfnresponse.SUCCESS,
+                          physicalResourceId=physicalId,
+                      )
+                  else:
+                      assert event["RequestType"].upper() == "DELETE"
+                      _delete(event["PhysicalResourceId"],LambdaInfoTracing)
+                      cfnresponse.send(
+                          event=event,
+                          context=context,
+                          responseData={},
+                          responseStatus=cfnresponse.SUCCESS,
+                          physicalResourceId=event["PhysicalResourceId"],
+                      )
+              except Exception as e:
+                  errorlog("PipLayer -- Internal Error")
+                  cfnresponse.send(
+                      event=event,
+                      context=context,
+                      responseData=None,
+                      responseStatus=cfnresponse.FAILED,
+                      reason=str(e))
+
+          def errorlog(error):
+              """ 
+              Log
+              
+              takes message as an input and print it with time in iso format 
+              """
+              logger.error('%s', error)
+
+          def infolog(string,LambdaInfoTracing):
+              """ 
+              Log
+              
+              takes message as an input and print it with time in iso format 
+              """
+              if str(LambdaInfoTracing) == "true": 
+                  logger.info('%s', string) 
+  PipLayer:
+    Type: Custom::PipLayer
+    Properties:
+      ServiceToken: !GetAtt PipLayerLambda.Arn
+      Region: !Ref AWS::Region
+      LayerName: PipLayer
+      Packages:
+        - crhelper==2.0.10
+
   # CloudWatch Event Trigger for Lifecycle Hooks
   NewInstanceEventRule:
     Type: "AWS::Events::Rule"
