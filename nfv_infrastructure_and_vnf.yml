@@ -1348,18 +1348,17 @@ Resources:
   # Lambda Function and Custom Resource for cleanup
   LambdaCleanup:
     Type: AWS::Serverless::Function
-    DependsOn: RoleLambdaUpdateASGCfn
+    DependsOn: PolicyLambdaAttach2ndEniCfn
     Properties:
       Runtime: "python3.8"
       Handler: cleanup.lambda_handler
       Role: !GetAtt RoleLambdaAttach2ndEniCfn.Arn
       CodeUri: src/
-      Timeout: 300
+      Timeout: 600
       Layers:
       - !Ref PipLayer
   CustomCleanup:
     Type: Custom::Cleanup
-    DependsOn: LambdaCleanup
     Properties:
       ServiceToken: !GetAtt 'LambdaCleanup.Arn' 
       VPCId: !Ref VPC
@@ -1436,7 +1435,7 @@ Resources:
           logger.setLevel(logging.INFO)
           class PipLayerException(Exception):
               pass
-          def _create(properties) -> t.Tuple[str, t.Mapping[str, str]]:
+          def _create(properties,LambdaInfoTracing) -> t.Tuple[str, t.Mapping[str, str]]:
               try:
                   layername = properties["LayerName"]
                   description = properties.get("Description", "PipLayer")
@@ -1466,23 +1465,23 @@ Resources:
                   Content={"ZipFile": zipfilename.read_bytes()},
                   CompatibleRuntimes=["python%d.%d" % sys.version_info[:2]],
               )
-              infolog("PipLayer -- Created layer %s", layer["LayerVersionArn"])
+              infolog("PipLayer -- Created layer {}".format(str(layer["LayerVersionArn"])),LambdaInfoTracing)
               return (layer["LayerVersionArn"], {})
-          def _delete(physical_id):
+          def _delete(physical_id,LambdaInfoTracing):
               match = re.fullmatch(
                   r"arn:aws:lambda:(?P<region>[^:]+):(?P<account>\d+):layer:"
                   r"(?P<layername>[^:]+):(?P<version_number>\d+)", physical_id)
               if not match:
-                  infolog("PipLayer -- Warning: Cannot parse physical id %s, not deleting", physical_id)
+                  infolog("PipLayer -- Warning: Not deleting, cannot parse physical id {}".format(str(physical_id)),LambdaInfoTracing)
                   return
               layername = match.group("layername")
               version_number = int(match.group("version_number"))
-              infolog("PipLayer -- Now deleting layer %s", layername)
+              infolog("PipLayer -- Now deleting layer {}".format(str(layername)),LambdaInfoTracing)
               client = boto3.client("lambda")
               deletion = client.delete_layer_version(
                   LayerName=layername,
                   VersionNumber=version_number)
-              infolog("PipLayer -- Deletion done")
+              infolog("PipLayer -- Deletion done",LambdaInfoTracing)
           def handler(event, context):
               LambdaInfoTracing = str(os.environ['LambdaInfoTracing'])
               infolog("PipLayer -- Complete Event: {}".format(str(json.dumps(event))),LambdaInfoTracing)
@@ -1491,7 +1490,7 @@ Resources:
                       # Note: treat UPDATE as CREATE; it will create a new physical ID,
                       # signalling CloudFormation that it's a replace and the old should be
                       # deleted
-                      physicalId, attributes = _create(event["ResourceProperties"])
+                      physicalId, attributes = _create(event["ResourceProperties"],LambdaInfoTracing)
                       cfnresponse.send(
                           event=event,
                           context=context,
@@ -1501,7 +1500,7 @@ Resources:
                       )
                   else:
                       assert event["RequestType"].upper() == "DELETE"
-                      _delete(event["PhysicalResourceId"])
+                      _delete(event["PhysicalResourceId"],LambdaInfoTracing)
                       cfnresponse.send(
                           event=event,
                           context=context,

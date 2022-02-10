@@ -29,7 +29,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 # Initialise the helper, all inputs are optional, this example shows the defaults
-helper = CfnResource(json_logging=False, log_level='DEBUG', boto_level='CRITICAL', sleep_on_delete=120, ssl_verify=None)
+helper = CfnResource(json_logging=False, log_level='DEBUG', boto_level='CRITICAL', sleep_on_delete=300, ssl_verify=None)
 
 ec2_client = boto3.client('ec2')
 ec2 = boto3.resource('ec2')
@@ -80,7 +80,7 @@ def delete(event, context):
             detach_interface(interface_id,LambdaInfoTracing)
         except botocore.exceptions.ClientError as e:
             errorlog("Error detaching interface: {}".format(e.response['Error']))
-            
+                
         try:
             # After detaching, delete the interface
             delete_interface(interface_id,eipaddress,eipallocation,LambdaInfoTracing)
