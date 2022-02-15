@@ -473,11 +473,11 @@ Resources:
       SubnetId:
         Ref: WAN3Subnet
 
-  #ICMP is allowed from anywhere within 10.0.0.0 address space (not recommended for real environments) 
+  #Security Group protecting instance, allowing instance access from within VPCCIDRBlock, and from JumpHostIPrange if ExternalSSHAccess is true
   Ec2SecGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Open-up all ports for 10.16/16 and ICMP and SSH from 10/8
+      GroupDescription: Security Group protecting instance, allowing instance access from within VPCCIDRBlock, and from JumpHostIPrange if ExternalSSHAccess is true
       GroupName: !Join ["-", [Ref: "AWS::StackName", "EC2-sec-group"]]
       VpcId:
         Ref: VPC
@@ -895,7 +895,7 @@ Resources:
   EndpointSecGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Open-up ports for local VPC
+      GroupDescription: Security Group attached to the local Endpoints, allowing instance access from within VPCCIDRBlock
       GroupName: !Join ["-", [Ref: "AWS::StackName", "vpc-sec-group"]]
       VpcId:
         Ref: VPC
@@ -1018,7 +1018,7 @@ Resources:
   InstanceWANSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Instance Security WAN Group Rules
+      GroupDescription: Security Group protecting WAN VIP interface, allowing overall ICMP access and instance access from JumpHostIPrange if ExternalSSHAccess is true
       VpcId:
         Ref: VPC
       SecurityGroupIngress:
