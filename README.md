@@ -1,6 +1,6 @@
 # Auto-healing persistent Virtual Network Functions on AWS
 
-[Read the post]() on this application in the AWS Industry Telecommunications blog.
+[Read the post](https://aws.amazon.com/blogs/industries/auto-healing-persistent-virtual-network-functions-on-aws/) on this application in the AWS Industry Telecommunications blog.
 
 ## Summary
 
